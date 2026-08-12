@@ -82,8 +82,9 @@ def tebak_kategori(teks: str) -> str:
     teks_lower = teks.lower()
     aturan = [
         ("Tembok Retak", ["retak"]),
-        ("Tembok Gompal/Terkupas", ["gompal", "terkupas", "kupas"]),
-        ("Tembok Berjamur", ["jamur", "berjamur"]),
+        ("Gompal/Terkupas", ["gompal", "terkupas", "kupas"]),
+        ("Berlubang", ["berlubang", "bolong"]),
+        ("Berjamur", ["jamur", "berjamur"]),
         ("Panel/Elektrikal", ["panel", "listrik", "mcb"]),
         ("Keamanan/Akses", ["tidak terkunci", "kunci"]),
     ]
@@ -99,13 +100,15 @@ def parse_laporan(teks: str) -> list[dict]:
     Mendukung variasi heading seperti:
       "Temuan patroli tower Clifford sbb :"
       "Temuan Patroli Tower Belmont Sbb:"
+      "Temuan patroli publik Area"           (tanpa nama tower / tanpa "sbb")
     dan penomoran seperti "1)." , "1.)", "2.)" dsb.
     Baris "@Nama Orang" di akhir blok dianggap sebagai PIC / penanggung jawab.
     """
     records = []
 
     pola_heading = re.compile(
-        r"Temuan\s*Patroli\s*Tower\s+([A-Za-z]+)\s*sbb\s*:?",
+        r"Temuan\s*Patroli\s*(?:Tower\s+(?P<tower>[A-Za-z]+)|(?P<area>Publik\s*Area|Public\s*Area))"
+        r"\s*(?:sbb\s*:?)?",
         re.IGNORECASE,
     )
     matches = list(pola_heading.finditer(teks))
@@ -114,7 +117,10 @@ def parse_laporan(teks: str) -> list[dict]:
         return records
 
     for i, m in enumerate(matches):
-        tower = m.group(1).strip().title()
+        if m.group("area"):
+            tower = "Publik Area"
+        else:
+            tower = m.group("tower").strip().title()
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(teks)
         blok = teks[start:end]
@@ -218,8 +224,9 @@ with tab_input:
                     "Kategori",
                     options=[
                         "Tembok Retak",
-                        "Tembok Gompal/Terkupas",
-                        "Tembok Berjamur",
+                        "Gompal/Terkupas",
+                        "Berlubang",
+                        "Berjamur",
                         "Panel/Elektrikal",
                         "Keamanan/Akses",
                         "Lainnya",
