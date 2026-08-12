@@ -22,6 +22,7 @@ import streamlit as st
 DATA_FILE = "data_temuan.xlsx"
 SHEET_NAME = "Temuan"
 COLUMNS = [
+    "ID",
     "Tanggal Patroli",
     "Tower",
     "PTD",
@@ -30,8 +31,11 @@ COLUMNS = [
     "Kategori",
     "PIC",
     "Status",
+    "Keterangan Progress",
+    "Tanggal Update",
     "Waktu Input",
 ]
+STATUS_OPTIONS = ["Baru", "Dalam Proses", "Selesai"]
 
 st.set_page_config(page_title="Pencatat Temuan Patroli", page_icon="🧱", layout="wide")
 
@@ -47,10 +51,25 @@ def load_data() -> pd.DataFrame:
             for col in COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
+            # Data lama mungkin belum punya ID -> isi otomatis
+            if df["ID"].isna().any() or (df["ID"] == "").any():
+                df["ID"] = range(1, len(df) + 1)
+            df["ID"] = df["ID"].astype(int)
+            # Pastikan kolom teks tetap bertipe string (bukan NaN/float) setelah round-trip Excel
+            kolom_teks = [c for c in COLUMNS if c != "ID"]
+            for col in kolom_teks:
+                df[col] = df[col].fillna("").astype(str)
+                df.loc[df[col] == "nan", col] = ""
             return df[COLUMNS]
         except Exception:
             pass
     return pd.DataFrame(columns=COLUMNS)
+
+
+def next_id(df: pd.DataFrame) -> int:
+    if df.empty or "ID" not in df.columns or df["ID"].isna().all():
+        return 1
+    return int(df["ID"].max()) + 1
 
 
 def save_data(df: pd.DataFrame) -> None:
@@ -215,7 +234,11 @@ with tab_input:
         if st.button("💾 Simpan ke Spreadsheet", type="primary"):
             df_lama = load_data()
             df_baru = edited_df.copy()
+            mulai_id = next_id(df_lama)
+            df_baru["ID"] = range(mulai_id, mulai_id + len(df_baru))
             df_baru["Waktu Input"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            df_baru["Keterangan Progress"] = ""
+            df_baru["Tanggal Update"] = ""
             for col in COLUMNS:
                 if col not in df_baru.columns:
                     df_baru[col] = ""
@@ -231,11 +254,23 @@ with tab_riwayat:
     if df_all.empty:
         st.info("Belum ada data tersimpan.")
     else:
+        jml_baru = int((df_all["Status"] == "Baru").sum())
+        jml_proses = int((df_all["Status"] == "Dalam Proses").sum())
+        jml_selesai = int((df_all["Status"] == "Selesai").sum())
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Temuan", len(df_all))
+        m2.metric("🆕 Baru", jml_baru)
+        m3.metric("🔧 Dalam Proses", jml_proses)
+        m4.metric("✅ Selesai", jml_selesai)
+
+        st.divider()
+
         col1, col2, col3 = st.columns(3)
         with col1:
             filter_tower = st.multiselect("Filter Tower", sorted(df_all["Tower"].dropna().unique()))
         with col2:
-            filter_status = st.multiselect("Filter Status", sorted(df_all["Status"].dropna().unique()))
+            filter_status = st.multiselect("Filter Status", STATUS_OPTIONS)
         with col3:
             cari = st.text_input("Cari kata kunci di kolom Temuan")
 
@@ -247,7 +282,50 @@ with tab_riwayat:
         if cari:
             df_filtered = df_filtered[df_filtered["Temuan"].str.contains(cari, case=False, na=False)]
 
-        st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+        st.subheader("🔄 Update Progres / Tandai Selesai")
+        st.caption(
+            "Ubah kolom **Status** dan **Keterangan Progress** langsung di tabel, "
+            "lalu klik tombol simpan di bawah. Kolom lain terkunci (tidak bisa diubah)."
+        )
+
+        kolom_terkunci = [c for c in COLUMNS if c not in ("Status", "Keterangan Progress")]
+
+        edited_riwayat = st.data_editor(
+            df_filtered,
+            column_config={
+                "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
+                "Keterangan Progress": st.column_config.TextColumn(
+                    "Keterangan Progress", help="Contoh: sudah diperbaiki tukang, menunggu material, dsb."
+                ),
+                "ID": st.column_config.NumberColumn("ID", disabled=True),
+            },
+            disabled=kolom_terkunci,
+            hide_index=True,
+            use_container_width=True,
+            key="editor_riwayat",
+        )
+
+        if st.button("💾 Simpan Perubahan Status/Progres", type="primary"):
+            df_updated = df_all.set_index("ID")
+            edited_indexed = edited_riwayat.set_index("ID")
+            hari_ini = date.today().strftime("%Y-%m-%d")
+            jumlah_berubah = 0
+
+            for temuan_id, baris_baru in edited_indexed.iterrows():
+                baris_lama = df_updated.loc[temuan_id]
+                status_berubah = baris_lama["Status"] != baris_baru["Status"]
+                catatan_berubah = baris_lama["Keterangan Progress"] != baris_baru["Keterangan Progress"]
+                if status_berubah or catatan_berubah:
+                    df_updated.loc[temuan_id, "Status"] = baris_baru["Status"]
+                    df_updated.loc[temuan_id, "Keterangan Progress"] = baris_baru["Keterangan Progress"]
+                    df_updated.loc[temuan_id, "Tanggal Update"] = hari_ini
+                    jumlah_berubah += 1
+
+            df_updated = df_updated.reset_index()[COLUMNS]
+            save_data(df_updated)
+            st.success(f"{jumlah_berubah} baris berhasil diperbarui.")
+            st.rerun()
+
         st.caption(f"Menampilkan {len(df_filtered)} dari {len(df_all)} total temuan.")
 
         if os.path.exists(DATA_FILE):
