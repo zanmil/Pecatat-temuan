@@ -36,6 +36,7 @@ COLUMNS = [
     "Waktu Input",
 ]
 STATUS_OPTIONS = ["Baru", "Dalam Proses", "Selesai"]
+PROGRESS_OPTIONS = ["On Progress", "Selesai"]
 
 st.set_page_config(page_title="Pencatat Temuan Patroli", page_icon="🧱", layout="wide")
 
@@ -284,19 +285,20 @@ with tab_riwayat:
 
         st.subheader("🔄 Update Progres / Tandai Selesai")
         st.caption(
-            "Ubah kolom **Status** dan **Keterangan Progress** langsung di tabel, "
+            "Ubah kolom **Status**, **Keterangan Progress**, dan **PIC** langsung di tabel, "
             "lalu klik tombol simpan di bawah. Kolom lain terkunci (tidak bisa diubah)."
         )
 
-        kolom_terkunci = [c for c in COLUMNS if c not in ("Status", "Keterangan Progress")]
+        kolom_terkunci = [c for c in COLUMNS if c not in ("Status", "Keterangan Progress", "PIC")]
 
         edited_riwayat = st.data_editor(
             df_filtered,
             column_config={
                 "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
-                "Keterangan Progress": st.column_config.TextColumn(
-                    "Keterangan Progress", help="Contoh: sudah diperbaiki tukang, menunggu material, dsb."
+                "Keterangan Progress": st.column_config.SelectboxColumn(
+                    "Keterangan Progress", options=PROGRESS_OPTIONS
                 ),
+                "PIC": st.column_config.TextColumn("PIC", help="Nama penanggung jawab"),
                 "ID": st.column_config.NumberColumn("ID", disabled=True),
             },
             disabled=kolom_terkunci,
@@ -315,9 +317,11 @@ with tab_riwayat:
                 baris_lama = df_updated.loc[temuan_id]
                 status_berubah = baris_lama["Status"] != baris_baru["Status"]
                 catatan_berubah = baris_lama["Keterangan Progress"] != baris_baru["Keterangan Progress"]
-                if status_berubah or catatan_berubah:
+                pic_berubah = baris_lama["PIC"] != baris_baru["PIC"]
+                if status_berubah or catatan_berubah or pic_berubah:
                     df_updated.loc[temuan_id, "Status"] = baris_baru["Status"]
                     df_updated.loc[temuan_id, "Keterangan Progress"] = baris_baru["Keterangan Progress"]
+                    df_updated.loc[temuan_id, "PIC"] = baris_baru["PIC"]
                     df_updated.loc[temuan_id, "Tanggal Update"] = hari_ini
                     jumlah_berubah += 1
 
