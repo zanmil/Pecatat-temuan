@@ -1,0 +1,38 @@
+ID,Tanggal Patroli,Jenis Temuan,Tower,PTD,Lantai,DVR,Channel,Temuan,Kategori,PIC,Status,Keterangan Progress,Tanggal Update,Waktu Input
+1,2026-08-29,Bangunan,Clifford,2,11,,,Termonitor Tembok Retak Di PTD 2 Lt 11,Tembok Retak,,Baru,,,2026-08-29 07:26:42
+2,2026-08-29,Bangunan,Clifford,1,01,,,Termonitor Tembok Terkupas Di Lt 01 PTD 1,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+3,2026-08-29,Bangunan,Belmont,2,01,,,Termonitor Tembok Retak Di PTD 2 Lt 01,Tembok Retak,,Baru,,,2026-08-29 07:26:42
+4,2026-08-29,Bangunan,Belmont,,27,,,Termonitor Ruang Panel Lt 27 Tidak Terkunci,Panel/Elektrikal,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+5,2026-08-29,Bangunan,Belmont,,,,,Termonitor Tembok Retak Di Samping Unit BE 01/006,Tembok Retak,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+6,2026-08-29,Bangunan,Belmont,,,,,Termonitor tembok gompal di depan unit BE 15/003,Gompal/Terkupas,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+7,2026-08-29,Bangunan,Belmont,,,,,Termonitor dinding retak di depan unit BE 01/006,Tembok Retak,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+8,2026-08-29,Bangunan,Dallington,,,,,Termonitor tembok berjamur & Retak di depan unit DA 23/011,Tembok Retak,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+9,2026-08-29,Bangunan,Dallington,,21,,,Termonitor tembok berjamur di area lt 21 koridor 10 & 11 tower dallington,Berjamur,Iqbaal Kensington,Baru,,,2026-08-29 07:26:42
+10,2026-08-29,Bangunan,Addington,2,30,,,Termonitor Tembok Retak di Area Lantai 30 PTD 2,Tembok Retak,,Baru,,,2026-08-29 07:26:42
+11,2026-08-29,Bangunan,Addington,,,,,Termonitor Tembok Gompal di depan Unit AD 31/006,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+12,2026-08-29,Bangunan,Publik Area,,,,,Termonitor pilar marmer berlubang di area lobby AB,Berlubang,,Baru,,,2026-08-29 07:26:42
+13,2026-08-29,Bangunan,Publik Area,,,,,Termonitor plafon berlubang di area lobby AB,Berlubang,,Baru,,,2026-08-29 07:26:42
+14,2026-08-29,Bangunan,Publik Area,,,,,Termonitor marmer gompal di depan drop off lobby AB,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+15,2026-08-29,Bangunan,Publik Area,,,,,Termonitor marmer gompal di depan drop off lobby CD,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+16,2026-08-29,Bangunan,Publik Area,,,,,Termonitor castin gompal di depan ruang loker scurity,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+17,2026-08-29,Bangunan,Publik Area,,,,,Termonitor castin gompal di area ram naik p.1 tower Dallington,Gompal/Terkupas,,Baru,,,2026-08-29 07:26:42
+18,2026-08-29,CCTV,Twr A,2,,4,5,Kamera CCTV mati: DVR 4 Ch 5 (Twr A PTD2 kluar roof),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+19,2026-08-29,CCTV,Twr A,1,23,4,13,Kamera CCTV mati: DVR 4 Ch 13 (Twr A Lt 23 PTD1),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+20,2026-08-29,CCTV,Twr C,,6,9,2,Kamera CCTV mati: DVR 9 Ch 2 (Twr C Lt 6 Loby),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+21,2026-08-29,CCTV,Twr C,1,12,10,3,Kamera CCTV mati: DVR 10 Ch 3 (Twr C Lt 12 PTD1),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+22,2026-08-29,CCTV,Twr C,,12,10,4,Kamera CCTV mati: DVR 10 Ch 4 (Twr C Lt 12 Loby),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+23,2026-08-29,CCTV,Twr C,,10,10,6,Kamera CCTV mati: DVR 10 Ch 6 (Twr C Lt 10 Loby),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+24,2026-08-29,CCTV,Twr C,2,19,10,12,Kamera CCTV mati: DVR 10 Ch 12 (Twr C Lt 19 PTD2),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+25,2026-08-29,CCTV,Twr C,,7,10,13,Kamera CCTV mati: DVR 10 Ch 13 (Twr C Lt 7 Loby Lift),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+26,2026-08-29,CCTV,Twr C,,19,11,3,Kamera CCTV mati: DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) - instalasi kabel rusak,CCTV Mati,,Baru,,,2026-08-29 07:26:42
+27,2026-08-29,CCTV,Twr C,2,19,11,4,Kamera CCTV mati: DVR 11 Ch 4 (Twr C Lt 19 PTD2),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+28,2026-08-29,CCTV,Twr C,2,18,11,7,Kamera CCTV mati: DVR 11 Ch 7 (Twr C Lt 18 Coridor PTD2),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+29,2026-08-29,CCTV,Twr C,1,16,11,9,Kamera CCTV mati: DVR 11 Ch 9 (Twr C Lt 16 Coridor PTD1),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+30,2026-08-29,CCTV,Twr C,,,12,2,Kamera CCTV mati: DVR 12 Ch 2 (Twr C Tangga LMR),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+31,2026-08-29,CCTV,Twr C,1,20,12,15,Kamera CCTV mati: DVR 12 Ch 15 (Twr C Lt 20 PTD1),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+32,2026-08-29,CCTV,Twr D,,12,14,4,Kamera CCTV mati: DVR 14 Ch 4 (Twr D Lt 12 Lobi Lift),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+33,2026-08-29,CCTV,Twr D,2,20,16,14,Kamera CCTV mati: DVR 16 Ch 14 (Twr D Lt 20 PTD2),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+34,2026-08-29,CCTV,Twr D,1,,20,10,Kamera CCTV mati: DVR 20 Ch 10 (Twr D P2 PTD 1),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+35,2026-08-29,CCTV,Twr DA,,,24,4,Kamera CCTV mati: DVR 24 Ch 4 (Parkir GF twr DA),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+36,2026-08-29,CCTV,,,,24,5,Kamera CCTV mati: DVR 24 Ch 5 (Ritel),CCTV Mati,,Baru,,,2026-08-29 07:26:42
+37,2026-08-29,CCTV,,,,24,15,Kamera CCTV mati: DVR 24 Ch 15 (Gardu Arah Lowres),CCTV Mati,,Baru,,,2026-08-29 07:26:42
