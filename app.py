@@ -1,9 +1,9 @@
 """
 Aplikasi Pencatat Temuan Patroli Tower
 ========================================
-Tempel teks laporan patroli (format grup WA), aplikasi akan otomatis
-memecahnya per tower & per temuan, lalu menyimpannya ke DATABASE SQLite
-(file temuan_patroli.db) sehingga data yang sudah dikirim tersimpan permanen.
+Tempel teks laporan patroli (format grup WA) — baik temuan bangunan (tembok
+retak, dsb) maupun temuan CCTV mati — aplikasi otomatis memecahnya jadi
+baris-baris data dan menyimpannya ke file CSV (data_temuan.csv).
 
 Cara menjalankan:
     pip install -r requirements.txt
@@ -12,7 +12,7 @@ Cara menjalankan:
 
 import re
 import io
-import sqlite3
+import os
 from datetime import date
 
 import pandas as pd
@@ -21,16 +21,17 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 # Konfigurasi
 # ---------------------------------------------------------------------------
-DB_FILE = "temuan_patroli.db"
-TABLE_NAME = "temuan"
+DATA_FILE = "data_temuan.csv"
 
-# Nama kolom yang ditampilkan di UI (urutan ini juga dipakai di DataFrame)
 COLUMNS = [
     "ID",
     "Tanggal Patroli",
+    "Jenis Temuan",
     "Tower",
     "PTD",
     "Lantai",
+    "DVR",
+    "Channel",
     "Temuan",
     "Kategori",
     "PIC",
@@ -40,139 +41,79 @@ COLUMNS = [
     "Waktu Input",
 ]
 
-# Nama kolom asli di tabel database (snake_case)
-DB_COLUMN_MAP = {
-    "ID": "id",
-    "Tanggal Patroli": "tanggal_patroli",
-    "Tower": "tower",
-    "PTD": "ptd",
-    "Lantai": "lantai",
-    "Temuan": "temuan",
-    "Kategori": "kategori",
-    "PIC": "pic",
-    "Status": "status",
-    "Keterangan Progress": "keterangan_progress",
-    "Tanggal Update": "tanggal_update",
-    "Waktu Input": "waktu_input",
-}
-DB_TO_DISPLAY = {v: k for k, v in DB_COLUMN_MAP.items()}
-
+JENIS_OPTIONS = ["Bangunan", "CCTV"]
 STATUS_OPTIONS = ["Baru", "Dalam Proses", "Selesai"]
 PROGRESS_OPTIONS = ["On Progress", "Selesai"]
+KATEGORI_OPTIONS = [
+    "Tembok Retak",
+    "Gompal/Terkupas",
+    "Berlubang",
+    "Berjamur",
+    "Panel/Elektrikal",
+    "Keamanan/Akses",
+    "CCTV Mati",
+    "Lainnya",
+]
 
 st.set_page_config(page_title="Pencatat Temuan Patroli", page_icon="🧱", layout="wide")
 
 
 # ---------------------------------------------------------------------------
-# Fungsi Database (SQLite)
+# Fungsi Penyimpanan (CSV)
 # ---------------------------------------------------------------------------
-def get_conn() -> sqlite3.Connection:
-    return sqlite3.connect(DB_FILE)
-
-
-def init_db() -> None:
-    """Buat tabel database kalau belum ada."""
-    with get_conn() as conn:
-        conn.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tanggal_patroli TEXT,
-                tower TEXT,
-                ptd TEXT,
-                lantai TEXT,
-                temuan TEXT,
-                kategori TEXT,
-                pic TEXT,
-                status TEXT,
-                keterangan_progress TEXT,
-                tanggal_update TEXT,
-                waktu_input TEXT
-            )
-            """
-        )
-        conn.commit()
-
-
 def load_data() -> pd.DataFrame:
-    """Ambil semua data dari database sebagai DataFrame (kolom pakai nama tampilan)."""
-    init_db()
-    with get_conn() as conn:
-        df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME} ORDER BY id", conn)
+    """Ambil semua data dari file CSV, atau DataFrame kosong kalau belum ada."""
+    if os.path.exists(DATA_FILE):
+        try:
+            df = pd.read_csv(DATA_FILE, dtype=str)
+            for col in COLUMNS:
+                if col not in df.columns:
+                    df[col] = ""
+            df = df.fillna("")
+            if (df["ID"] == "").any():
+                df["ID"] = range(1, len(df) + 1)
+            df["ID"] = df["ID"].astype(int)
+            return df[COLUMNS]
+        except Exception:
+            pass
+    return pd.DataFrame(columns=COLUMNS)
 
+
+def next_id(df: pd.DataFrame) -> int:
     if df.empty:
-        return pd.DataFrame(columns=COLUMNS)
+        return 1
+    return int(df["ID"].max()) + 1
 
-    df = df.rename(columns=DB_TO_DISPLAY)
-    df["ID"] = df["ID"].astype(int)
 
-    kolom_teks = [c for c in COLUMNS if c != "ID"]
-    for col in kolom_teks:
-        if col not in df.columns:
-            df[col] = ""
-        df[col] = df[col].fillna("").astype(str)
-        df.loc[df[col] == "nan", col] = ""
-
-    return df[COLUMNS]
+def save_semua(df: pd.DataFrame) -> None:
+    df.to_csv(DATA_FILE, index=False)
 
 
 def insert_rows(df_baru: pd.DataFrame) -> None:
-    """Simpan baris-baris temuan baru ke database (ID otomatis dari database)."""
-    init_db()
-    kolom_db = [
-        "tanggal_patroli", "tower", "ptd", "lantai", "temuan",
-        "kategori", "pic", "status", "keterangan_progress",
-        "tanggal_update", "waktu_input",
-    ]
-    with get_conn() as conn:
-        cur = conn.cursor()
-        for _, row in df_baru.iterrows():
-            nilai = (
-                str(row.get("Tanggal Patroli", "")),
-                str(row.get("Tower", "")),
-                str(row.get("PTD", "")),
-                str(row.get("Lantai", "")),
-                str(row.get("Temuan", "")),
-                str(row.get("Kategori", "")),
-                str(row.get("PIC", "")),
-                str(row.get("Status", "")),
-                str(row.get("Keterangan Progress", "")),
-                str(row.get("Tanggal Update", "")),
-                str(row.get("Waktu Input", "")),
-            )
-            placeholder = ", ".join(["?"] * len(kolom_db))
-            cur.execute(
-                f"INSERT INTO {TABLE_NAME} ({', '.join(kolom_db)}) VALUES ({placeholder})",
-                nilai,
-            )
-        conn.commit()
-
-
-def update_row(temuan_id: int, status: str, keterangan: str, pic: str, tanggal_update: str) -> None:
-    """Update status/progres/PIC satu baris temuan berdasarkan ID."""
-    with get_conn() as conn:
-        conn.execute(
-            f"""
-            UPDATE {TABLE_NAME}
-            SET status = ?, keterangan_progress = ?, pic = ?, tanggal_update = ?
-            WHERE id = ?
-            """,
-            (status, keterangan, pic, tanggal_update, int(temuan_id)),
-        )
-        conn.commit()
+    """Tambahkan baris-baris temuan baru ke CSV (ID otomatis lanjut dari data lama)."""
+    df_lama = load_data()
+    mulai_id = next_id(df_lama)
+    df_baru = df_baru.copy()
+    df_baru["ID"] = range(mulai_id, mulai_id + len(df_baru))
+    for col in COLUMNS:
+        if col not in df_baru.columns:
+            df_baru[col] = ""
+    df_final = pd.concat([df_lama, df_baru[COLUMNS]], ignore_index=True)
+    save_semua(df_final)
 
 
 def export_ke_excel_bytes(df: pd.DataFrame) -> bytes:
-    """Ubah DataFrame jadi file Excel (bytes) untuk didownload — dipakai untuk export saja,
-    bukan sebagai sumber data utama (sumber data utama tetap database SQLite)."""
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Temuan", index=False)
     return buffer.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# Parser Laporan (Bangunan + CCTV)
+# ---------------------------------------------------------------------------
 def tebak_kategori(teks: str) -> str:
-    """Menebak kategori temuan secara sederhana berdasarkan kata kunci."""
+    """Menebak kategori temuan bangunan secara sederhana berdasarkan kata kunci."""
     teks_lower = teks.lower()
     aturan = [
         ("Tembok Retak", ["retak"]),
@@ -190,62 +131,105 @@ def tebak_kategori(teks: str) -> str:
 
 def parse_laporan(teks: str) -> list[dict]:
     """
-    Pecah teks laporan mentah menjadi list temuan.
-    Mendukung variasi heading seperti:
-      "Temuan patroli tower Clifford sbb :"
-      "Temuan Patroli Tower Belmont Sbb:"
-      "Temuan patroli publik Area"           (tanpa nama tower / tanpa "sbb")
-    dan penomoran seperti "1)." , "1.)", "2.)" dsb.
-    Baris "@Nama Orang" di akhir blok dianggap sebagai PIC / penanggung jawab.
+    Pecah teks laporan mentah menjadi list temuan. Mendukung dua jenis heading:
+
+      1) Temuan bangunan:
+         "Temuan patroli tower Clifford sbb :"      (per tower, numbering "1).")
+         "Temuan patroli publik Area"                (tanpa nama tower/"sbb")
+
+      2) Temuan CCTV mati:
+         "Kamera CCTV yang mati 20 titik"            (bullet "* DVR X Ch Y (lokasi) [catatan]")
+
+    Baris "@Nama Orang" di blok bangunan dianggap PIC. Tower/PTD/Lantai untuk
+    item CCTV otomatis diekstrak dari teks lokasi dalam kurung (mis. "Twr A PTD2 Lt 11").
     """
-    records = []
+    records: list[dict] = []
 
     pola_heading = re.compile(
-        r"Temuan\s*Patroli\s*(?:Tower\s+(?P<tower>[A-Za-z]+)|(?P<area>Publik\s*Area|Public\s*Area))"
-        r"\s*(?:sbb\s*:?)?",
+        r"Temuan\s*Patroli\s*(?:Tower\s+(?P<tower>[A-Za-z]+)|(?P<area>Publik\s*Area|Public\s*Area))\s*(?:sbb\s*:?)?"
+        r"|Kamera\s*CCTV\s*yang\s*mati\s*(?:\d+\s*titik)?",
         re.IGNORECASE,
     )
     matches = list(pola_heading.finditer(teks))
-
     if not matches:
         return records
 
     for i, m in enumerate(matches):
-        if m.group("area"):
-            tower = "Publik Area"
-        else:
-            tower = m.group("tower").strip().title()
+        heading_text = m.group(0)
+        jenis = "CCTV" if re.search(r"cctv", heading_text, re.IGNORECASE) else "Bangunan"
+
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(teks)
         blok = teks[start:end]
 
-        pic_match = re.search(r"@(.+)", blok)
-        pic = pic_match.group(1).strip() if pic_match else ""
-        blok_tanpa_pic = re.sub(r"@.+", "", blok)
+        if jenis == "Bangunan":
+            tower = "Publik Area" if m.group("area") else m.group("tower").strip().title()
 
-        for baris in blok_tanpa_pic.split("\n"):
-            baris = baris.strip()
-            if not baris:
-                continue
-            item_match = re.match(r"^\d+\s*[.)]+\s*(.+)", baris)
-            if not item_match:
-                continue
-            temuan = re.sub(r"\s+", " ", item_match.group(1).strip())
+            pic_match = re.search(r"@(.+)", blok)
+            pic = pic_match.group(1).strip() if pic_match else ""
+            blok_bersih = re.sub(r"@.+", "", blok)
 
-            lantai_m = re.search(r"(?:Lt\.?|Lantai)\s*(\d+)", temuan, re.IGNORECASE)
-            ptd_m = re.search(r"PTD\s*(\d+)", temuan, re.IGNORECASE)
+            for baris in blok_bersih.split("\n"):
+                baris = baris.strip()
+                if not baris:
+                    continue
+                item_match = re.match(r"^\d+\s*[.)]+\s*(.+)", baris)
+                if not item_match:
+                    continue
+                temuan = re.sub(r"\s+", " ", item_match.group(1).strip())
+                lantai_m = re.search(r"(?:Lt\.?|Lantai)\s*(\d+)", temuan, re.IGNORECASE)
+                ptd_m = re.search(r"PTD\s*(\d+)", temuan, re.IGNORECASE)
 
-            records.append(
-                {
+                records.append({
+                    "Jenis Temuan": "Bangunan",
                     "Tower": tower,
                     "PTD": ptd_m.group(1) if ptd_m else "",
                     "Lantai": lantai_m.group(1) if lantai_m else "",
+                    "DVR": "",
+                    "Channel": "",
                     "Temuan": temuan,
                     "Kategori": tebak_kategori(temuan),
                     "PIC": pic,
                     "Status": "Baru",
-                }
-            )
+                })
+        else:  # CCTV
+            for baris in blok.split("\n"):
+                baris = baris.strip()
+                if not baris:
+                    continue
+                item_match = re.match(
+                    r"^\*\s*DVR\s*(?P<dvr>\d+)\s*Ch\s*(?P<ch>\d+)\s*\(\s*(?P<lokasi>[^)]+?)\s*\)\s*(?P<catatan>.*)$",
+                    baris,
+                    re.IGNORECASE,
+                )
+                if not item_match:
+                    continue
+                dvr = item_match.group("dvr")
+                ch = item_match.group("ch")
+                lokasi = item_match.group("lokasi").strip()
+                catatan = item_match.group("catatan").strip()
+
+                tower_m = re.search(r"Twr\s*([A-Za-z0-9]+)", lokasi, re.IGNORECASE)
+                tower = f"Twr {tower_m.group(1).upper()}" if tower_m else ""
+                lantai_m = re.search(r"(?:Lt\.?|Lantai)\s*(\d+)", lokasi, re.IGNORECASE)
+                ptd_m = re.search(r"PTD\s*(\d+)", lokasi, re.IGNORECASE)
+
+                temuan_text = f"Kamera CCTV mati: DVR {dvr} Ch {ch} ({lokasi})"
+                if catatan:
+                    temuan_text += f" - {catatan}"
+
+                records.append({
+                    "Jenis Temuan": "CCTV",
+                    "Tower": tower,
+                    "PTD": ptd_m.group(1) if ptd_m else "",
+                    "Lantai": lantai_m.group(1) if lantai_m else "",
+                    "DVR": dvr,
+                    "Channel": ch,
+                    "Temuan": temuan_text,
+                    "Kategori": "CCTV Mati",
+                    "PIC": "",
+                    "Status": "Baru",
+                })
 
     return records
 
@@ -255,8 +239,8 @@ def parse_laporan(teks: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 st.title("🧱 Pencatat Temuan Patroli Tower")
 st.caption(
-    "Tempel teks laporan patroli dari grup WA, sistem akan otomatis memecahnya "
-    "menjadi baris-baris temuan dan menyimpannya ke database (SQLite)."
+    "Tempel teks laporan patroli dari grup WA (temuan bangunan atau CCTV mati), "
+    "sistem otomatis memecahnya jadi baris-baris data dan menyimpan ke file CSV."
 )
 
 if "hasil_parse" not in st.session_state:
@@ -271,12 +255,14 @@ with tab_input:
     with col_a:
         teks_laporan = st.text_area(
             "Tempel teks laporan di sini",
-            height=350,
+            height=380,
             placeholder=(
                 "Temuan patroli tower Clifford sbb :\n"
                 "1). Termonitor Tembok Retak Di PTD 2 Lt 11\n"
-                "2.) Termonitor Tembok Terkupas Di Lt 01 PTD 1\n"
-                "..."
+                "2.) Termonitor Tembok Terkupas Di Lt 01 PTD 1\n\n"
+                "Kamera CCTV yang mati 2 titik\n"
+                "* DVR 4 Ch 5 (Twr A PTD2 kluar roof)\n"
+                "* DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) instalasi kabel rusak"
             ),
         )
 
@@ -285,8 +271,9 @@ with tab_input:
         st.write("")
         parse_clicked = st.button("🔍 Parse Laporan", type="primary", use_container_width=True)
         st.info(
-            "Setelah di-parse, kamu masih bisa mengedit tiap baris (kategori, "
-            "status, PIC) sebelum disimpan ke database.",
+            "Mendukung dua format sekaligus dalam satu teks: temuan bangunan "
+            "('Temuan patroli tower ... sbb :') dan temuan CCTV mati "
+            "('Kamera CCTV yang mati ... titik').",
             icon="✏️",
         )
 
@@ -299,14 +286,16 @@ with tab_input:
                 st.error(
                     "Tidak ada temuan yang terdeteksi. Pastikan format masih memuat "
                     "'Temuan Patroli Tower ... sbb :' / 'Temuan patroli publik Area' "
-                    "dan penomoran seperti '1).'."
+                    "(numbering '1).') atau 'Kamera CCTV yang mati ... titik' (bullet '*')."
                 )
             else:
                 for r in hasil:
                     r["Tanggal Patroli"] = tanggal_patroli
                 st.session_state.hasil_parse = pd.DataFrame(hasil)
+                jml_cctv = sum(1 for r in hasil if r["Jenis Temuan"] == "CCTV")
+                jml_bangunan = len(hasil) - jml_cctv
                 st.success(
-                    f"{len(hasil)} temuan berhasil terdeteksi. "
+                    f"{len(hasil)} temuan terdeteksi ({jml_bangunan} bangunan, {jml_cctv} CCTV). "
                     "Silakan cek & edit di bawah sebelum menyimpan."
                 )
 
@@ -315,21 +304,9 @@ with tab_input:
         edited_df = st.data_editor(
             st.session_state.hasil_parse,
             column_config={
-                "Status": st.column_config.SelectboxColumn(
-                    "Status", options=STATUS_OPTIONS
-                ),
-                "Kategori": st.column_config.SelectboxColumn(
-                    "Kategori",
-                    options=[
-                        "Tembok Retak",
-                        "Gompal/Terkupas",
-                        "Berlubang",
-                        "Berjamur",
-                        "Panel/Elektrikal",
-                        "Keamanan/Akses",
-                        "Lainnya",
-                    ],
-                ),
+                "Jenis Temuan": st.column_config.SelectboxColumn("Jenis Temuan", options=JENIS_OPTIONS),
+                "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
+                "Kategori": st.column_config.SelectboxColumn("Kategori", options=KATEGORI_OPTIONS),
                 "Tanggal Patroli": st.column_config.DateColumn("Tanggal Patroli"),
             },
             num_rows="dynamic",
@@ -337,7 +314,7 @@ with tab_input:
             key="editor_temuan",
         )
 
-        if st.button("💾 Simpan ke Database", type="primary"):
+        if st.button("💾 Simpan ke CSV", type="primary"):
             df_baru = edited_df.copy()
             df_baru["Waktu Input"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
             df_baru["Keterangan Progress"] = ""
@@ -347,36 +324,42 @@ with tab_input:
 
             st.session_state.hasil_parse = None
             total = len(load_data())
-            st.success(f"Tersimpan ke database! Total data sekarang: {total} baris.")
+            st.success(f"Tersimpan ke {DATA_FILE}! Total data sekarang: {total} baris.")
             st.rerun()
 
 # ----------------------------- TAB RIWAYAT ----------------------------------
 with tab_riwayat:
     df_all = load_data()
     if df_all.empty:
-        st.info("Belum ada data tersimpan di database.")
+        st.info("Belum ada data tersimpan.")
     else:
         jml_baru = int((df_all["Status"] == "Baru").sum())
         jml_proses = int((df_all["Status"] == "Dalam Proses").sum())
         jml_selesai = int((df_all["Status"] == "Selesai").sum())
+        jml_cctv = int((df_all["Jenis Temuan"] == "CCTV").sum())
 
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Total Temuan", len(df_all))
-        m2.metric("🆕 Baru", jml_baru)
-        m3.metric("🔧 Dalam Proses", jml_proses)
-        m4.metric("✅ Selesai", jml_selesai)
+        m2.metric("📷 CCTV Mati", jml_cctv)
+        m3.metric("🆕 Baru", jml_baru)
+        m4.metric("🔧 Dalam Proses", jml_proses)
+        m5.metric("✅ Selesai", jml_selesai)
 
         st.divider()
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            filter_tower = st.multiselect("Filter Tower", sorted(df_all["Tower"].dropna().unique()))
+            filter_jenis = st.multiselect("Filter Jenis Temuan", JENIS_OPTIONS)
         with col2:
-            filter_status = st.multiselect("Filter Status", STATUS_OPTIONS)
+            filter_tower = st.multiselect("Filter Tower", sorted([t for t in df_all["Tower"].unique() if t]))
         with col3:
+            filter_status = st.multiselect("Filter Status", STATUS_OPTIONS)
+        with col4:
             cari = st.text_input("Cari kata kunci di kolom Temuan")
 
         df_filtered = df_all.copy()
+        if filter_jenis:
+            df_filtered = df_filtered[df_filtered["Jenis Temuan"].isin(filter_jenis)]
         if filter_tower:
             df_filtered = df_filtered[df_filtered["Tower"].isin(filter_tower)]
         if filter_status:
@@ -420,16 +403,15 @@ with tab_riwayat:
                 catatan_berubah = baris_lama["Keterangan Progress"] != baris_baru["Keterangan Progress"]
                 pic_berubah = baris_lama["PIC"] != baris_baru["PIC"]
                 if status_berubah or catatan_berubah or pic_berubah:
-                    update_row(
-                        temuan_id,
-                        baris_baru["Status"],
-                        baris_baru["Keterangan Progress"],
-                        baris_baru["PIC"],
-                        hari_ini,
-                    )
+                    df_all_indexed.loc[temuan_id, "Status"] = baris_baru["Status"]
+                    df_all_indexed.loc[temuan_id, "Keterangan Progress"] = baris_baru["Keterangan Progress"]
+                    df_all_indexed.loc[temuan_id, "PIC"] = baris_baru["PIC"]
+                    df_all_indexed.loc[temuan_id, "Tanggal Update"] = hari_ini
                     jumlah_berubah += 1
 
-            st.success(f"{jumlah_berubah} baris berhasil diperbarui di database.")
+            df_final = df_all_indexed.reset_index()[COLUMNS]
+            save_semua(df_final)
+            st.success(f"{jumlah_berubah} baris berhasil diperbarui.")
             st.rerun()
 
         st.caption(f"Menampilkan {len(df_filtered)} dari {len(df_all)} total temuan.")
@@ -437,18 +419,23 @@ with tab_riwayat:
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
+                "⬇️ Download CSV",
+                data=df_all.to_csv(index=False).encode("utf-8"),
+                file_name=DATA_FILE,
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with col_dl2:
+            st.download_button(
                 "⬇️ Export ke Excel",
                 data=export_ke_excel_bytes(df_all),
                 file_name="data_temuan.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-        with col_dl2:
-            with open(DB_FILE, "rb") as f:
-                st.download_button(
-                    "⬇️ Download File Database (.db)",
-                    data=f,
-                    file_name=DB_FILE,
-                    mime="application/octet-stream",
-                    use_container_width=True,
-                )
+
+        with st.expander("📄 Lihat Isi File CSV Mentah"):
+            st.caption(f"Isi apa adanya dari file **{os.path.abspath(DATA_FILE)}**.")
+            if os.path.exists(DATA_FILE):
+                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                    st.code(f.read(), language="text")
