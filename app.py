@@ -1,3 +1,18 @@
+"""
+Aplikasi Pencatat Temuan Patroli Tower
+========================================
+Dua fitur terpisah:
+  1) Temuan Dinding/Bangunan (tembok retak, gompal, dll)
+  2) Temuan CCTV Mati (DVR/Channel)
+
+Masing-masing punya input, parser, dan riwayat sendiri-sendiri.
+Data disimpan ke file CSV (data_temuan.csv).
+
+Cara menjalankan:
+    pip install -r requirements.txt
+    streamlit run app.py
+"""
+
 import re
 import io
 import os
@@ -204,16 +219,17 @@ def parse_dinding(teks: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 def parse_cctv(teks: str) -> list[dict]:
     """
-    Parser khusus temuan CCTV mati. Mengenali tiap baris bullet:
+    Parser khusus temuan CCTV mati. Mengenali tiap baris bullet (boleh pakai
+    tanda "*" atau "-"):
       "* DVR 4 Ch 5 (Twr A PTD2 kluar roof)"
-      "* DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) instalasi kabel rusak"
+      "- DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) instalasi kabel rusak"
     Tidak butuh heading khusus — setiap baris yang cocok pola bullet akan
     langsung dianggap 1 temuan, jadi boleh ada beberapa section "Kamera CCTV
     yang mati ... titik" sekaligus dalam satu teks.
     """
     records: list[dict] = []
     pola_item = re.compile(
-        r"^\*\s*DVR\s*(?P<dvr>\d+)\s*Ch\s*(?P<ch>\d+)\s*\(\s*(?P<lokasi>[^)]+?)\s*\)\s*(?P<catatan>.*)$",
+        r"^[*\-]\s*DVR\s*(?P<dvr>\d+)\s*Ch\s*(?P<ch>\d+)\s*\(\s*(?P<lokasi>[^)]+?)\s*\)\s*(?P<catatan>.*)$",
         re.IGNORECASE,
     )
 
@@ -351,8 +367,8 @@ with tab_input:
                 height=350,
                 placeholder=(
                     "Kamera CCTV yang mati 2 titik\n"
-                    "* DVR 4 Ch 5 (Twr A PTD2 kluar roof)\n"
-                    "* DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) instalasi kabel rusak"
+                    "- DVR 4 Ch 5 (Twr A PTD2 kluar roof)\n"
+                    "- DVR 11 Ch 3 (Twr C Lt 19 Loby Lift) instalasi kabel rusak"
                 ),
                 key="teks_cctv",
             )
@@ -363,7 +379,8 @@ with tab_input:
                 "🔍 Parse Laporan CCTV", type="primary", use_container_width=True
             )
             st.info(
-                "Format tiap baris: '* DVR <no> Ch <no> (lokasi) [catatan opsional]'. "
+                "Format tiap baris: '* DVR <no> Ch <no> (lokasi) [catatan opsional]' — "
+                "boleh pakai '*' atau '-' di depan. "
                 "Tower/PTD/Lantai otomatis diambil dari teks lokasi.",
                 icon="✏️",
             )
