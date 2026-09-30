@@ -1,9 +1,10 @@
 """
 Aplikasi Pencatat Temuan Patroli Tower
 ========================================
-Dua fitur terpisah:
+Tiga fitur terpisah:
   1) Temuan Dinding/Bangunan (tembok retak, gompal, dll)
   2) Temuan CCTV Mati (DVR/Channel)
+  3) Temuan MCFA (Trouble Fire Alarm: Flow Switch, Gas Detector, MVD, dll)
 
 Masing-masing punya input, parser, dan riwayat sendiri-sendiri.
 Data disimpan ke file CSV (data_temuan.csv).
@@ -27,6 +28,7 @@ import streamlit as st
 DATA_FILE = "data_temuan.csv"
 DATA_FILE_DINDING = "data_temuan_dinding.csv"
 DATA_FILE_CCTV = "data_temuan_cctv.csv"
+DATA_FILE_MCFA = "data_temuan_mcfa.csv"
 
 COLUMNS = [
     "ID",
@@ -37,6 +39,8 @@ COLUMNS = [
     "Lantai",
     "DVR",
     "Channel",
+    "Zone",
+    "Hari Trouble",
     "Temuan",
     "Kategori",
     "PIC",
@@ -62,7 +66,7 @@ st.set_page_config(page_title="Pencatat Temuan Patroli", page_icon="🧱", layou
 
 
 # ---------------------------------------------------------------------------
-# Fungsi Penyimpanan (CSV) — dipakai bersama oleh kedua fitur
+# Fungsi Penyimpanan (CSV) — dipakai bersama oleh ketiga fitur
 # ---------------------------------------------------------------------------
 def load_data() -> pd.DataFrame:
     """Ambil semua data dari file CSV, atau DataFrame kosong kalau belum ada."""
@@ -90,11 +94,12 @@ def next_id(df: pd.DataFrame) -> int:
 
 def save_semua(df: pd.DataFrame) -> None:
     """Simpan data gabungan ke data_temuan.csv, SEKALIGUS otomatis regenerate
-    data_temuan_dinding.csv dan data_temuan_cctv.csv — jadi kedua file itu
-    selalu up-to-date tanpa perlu klik download manual."""
+    data_temuan_dinding.csv, data_temuan_cctv.csv, dan data_temuan_mcfa.csv —
+    jadi ketiga file itu selalu up-to-date tanpa perlu klik download manual."""
     df.to_csv(DATA_FILE, index=False)
     df[df["Jenis Temuan"] == "Bangunan"].to_csv(DATA_FILE_DINDING, index=False)
     df[df["Jenis Temuan"] == "CCTV"].to_csv(DATA_FILE_CCTV, index=False)
+    df[df["Jenis Temuan"] == "MCFA"].to_csv(DATA_FILE_MCFA, index=False)
 
 
 def insert_rows(df_baru: pd.DataFrame) -> None:
@@ -272,12 +277,70 @@ def parse_cctv(teks: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Parser — Temuan MCFA (Trouble Fire Alarm)
+# ---------------------------------------------------------------------------
+def parse_mcfa(teks: str) -> list[dict]:
+    """
+    Parser khusus temuan trouble MCFA. Mengenali tiap baris bullet (boleh
+    pakai tanda "*" atau "-"), diakhiri "(N hari)":
+      "- FLOW SWITCH BASEMENT A Zone Z1 (30 hari)"
+      "- ZONE 2 UNIT 1,2&3 LT 1 TOWER B Zone Z39 (26 hari)"
+      "- GAS DETECTOR Z2 LT 7 TOWER A (6 hari)"
+    Baris heading seperti "System MCFA" / "Trouble 11 titik:" otomatis
+    diabaikan (tidak cocok pola bullet). Tower/Lantai/Zone otomatis
+    diekstrak dari teks sebelum "(N hari)".
+    """
+    records: list[dict] = []
+    pola_item = re.compile(
+        r"^[*\-]\s*(?P<isi>.+?)\s*\(\s*(?P<hari>\d+)\s*hari\s*\)\s*$",
+        re.IGNORECASE,
+    )
+
+    for baris in teks.split("\n"):
+        baris = baris.strip()
+        if not baris:
+            continue
+        item_match = pola_item.match(baris)
+        if not item_match:
+            continue
+
+        isi = item_match.group("isi").strip()
+        isi = re.sub(r"\s+", " ", isi)
+        hari = item_match.group("hari")
+
+        tower_m = re.search(r"TOWER\s*([A-Za-z0-9]+)", isi, re.IGNORECASE)
+        tower = f"Tower {tower_m.group(1).upper()}" if tower_m else ""
+        lantai_m = re.search(r"(?:Lt\.?|Lantai)\s*(\d+)", isi, re.IGNORECASE)
+        zone_m = re.search(r"Zone\s*(Z\d+)", isi, re.IGNORECASE)
+        zone = zone_m.group(1).upper() if zone_m else ""
+
+        temuan_text = f"Trouble MCFA: {isi} ({hari} hari)"
+
+        records.append({
+            "Jenis Temuan": "MCFA",
+            "Tower": tower,
+            "PTD": "",
+            "Lantai": lantai_m.group(1) if lantai_m else "",
+            "DVR": "",
+            "Channel": "",
+            "Zone": zone,
+            "Hari Trouble": hari,
+            "Temuan": temuan_text,
+            "Kategori": "Trouble MCFA",
+            "PIC": "",
+            "Status": "Baru",
+        })
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
 st.title("🧱 Pencatat Temuan Patroli Tower")
-st.caption("Dua fitur terpisah: Temuan Dinding/Bangunan dan Temuan CCTV Mati — masing-masing punya input & riwayat sendiri.")
+st.caption("Tiga fitur terpisah: Temuan Dinding/Bangunan, Temuan CCTV Mati, dan Temuan MCFA — masing-masing punya input & riwayat sendiri.")
 
-for key in ("hasil_parse_dinding", "hasil_parse_cctv"):
+for key in ("hasil_parse_dinding", "hasil_parse_cctv", "hasil_parse_mcfa"):
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -287,7 +350,9 @@ tab_input, tab_riwayat = st.tabs(["📋 Input Laporan Baru", "📚 Riwayat Temua
 # TAB INPUT
 # ============================================================================
 with tab_input:
-    subtab_in_dinding, subtab_in_cctv = st.tabs(["🧱 Temuan Dinding/Bangunan", "📷 Temuan CCTV Mati"])
+    subtab_in_dinding, subtab_in_cctv, subtab_in_mcfa = st.tabs(
+        ["🧱 Temuan Dinding/Bangunan", "📷 Temuan CCTV Mati", "🔥 Temuan MCFA"]
+    )
 
     # ------------------------- INPUT: DINDING/BANGUNAN --------------------
     with subtab_in_dinding:
@@ -425,6 +490,75 @@ with tab_input:
                 st.success(f"Tersimpan! Total titik CCTV mati sekarang: {total} baris.")
                 st.rerun()
 
+    # ------------------------- INPUT: MCFA ----------------------------------
+    with subtab_in_mcfa:
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            teks_mcfa = st.text_area(
+                "Tempel teks laporan trouble MCFA di sini",
+                height=350,
+                placeholder=(
+                    "System MCFA\n"
+                    "Trouble 11 titik:\n"
+                    "- FLOW SWITCH BASEMENT A Zone Z1 (30 hari)\n"
+                    "- ZONE 2 UNIT 1,2&3 LT 1 TOWER B Zone Z39 (26 hari)\n"
+                    "- GAS DETECTOR Z2 LT 7 TOWER A (6 hari)"
+                ),
+                key="teks_mcfa",
+            )
+        with col_b:
+            tanggal_mcfa = st.date_input("Tanggal Patroli", value=date.today(), key="tgl_mcfa")
+            st.write("")
+            parse_mcfa_clicked = st.button(
+                "🔍 Parse Laporan MCFA", type="primary", use_container_width=True
+            )
+            st.info(
+                "Tiap baris diawali '*' atau '-', diakhiri '(N hari)'. Baris heading "
+                "seperti 'System MCFA' / 'Trouble N titik:' otomatis diabaikan. "
+                "Tower/Lantai/Zone otomatis diambil dari teksnya.",
+                icon="✏️",
+            )
+
+        if parse_mcfa_clicked:
+            if not teks_mcfa.strip():
+                st.warning("Teks laporan masih kosong.")
+            else:
+                hasil = parse_mcfa(teks_mcfa)
+                if not hasil:
+                    st.error(
+                        "Tidak ada temuan MCFA yang terdeteksi. Pastikan tiap baris berformat "
+                        "'* <deskripsi> (N hari)' atau '- <deskripsi> (N hari)'."
+                    )
+                else:
+                    for r in hasil:
+                        r["Tanggal Patroli"] = tanggal_mcfa
+                    st.session_state.hasil_parse_mcfa = pd.DataFrame(hasil)
+                    st.success(f"{len(hasil)} titik trouble MCFA terdeteksi. Cek & edit di bawah sebelum menyimpan.")
+
+        if st.session_state.hasil_parse_mcfa is not None:
+            st.subheader("Pratinjau & Edit Sebelum Disimpan")
+            edited_mcfa = st.data_editor(
+                st.session_state.hasil_parse_mcfa,
+                column_config={
+                    "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
+                    "Tanggal Patroli": st.column_config.DateColumn("Tanggal Patroli"),
+                },
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_input_mcfa",
+            )
+
+            if st.button("💾 Simpan Temuan MCFA ke CSV", type="primary"):
+                df_baru = edited_mcfa.copy()
+                df_baru["Waktu Input"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                df_baru["Keterangan Progress"] = ""
+                df_baru["Tanggal Update"] = ""
+                insert_rows(df_baru)
+                st.session_state.hasil_parse_mcfa = None
+                total = int((load_data()["Jenis Temuan"] == "MCFA").sum())
+                st.success(f"Tersimpan! Total titik trouble MCFA sekarang: {total} baris.")
+                st.rerun()
+
 # ============================================================================
 # TAB RIWAYAT
 # ============================================================================
@@ -434,7 +568,9 @@ with tab_riwayat:
     if df_all.empty:
         st.info("Belum ada data tersimpan.")
     else:
-        subtab_riw_dinding, subtab_riw_cctv = st.tabs(["🧱 Riwayat Dinding/Bangunan", "📷 Riwayat CCTV Mati"])
+        subtab_riw_dinding, subtab_riw_cctv, subtab_riw_mcfa = st.tabs(
+            ["🧱 Riwayat Dinding/Bangunan", "📷 Riwayat CCTV Mati", "🔥 Riwayat MCFA"]
+        )
 
         # ------------------------- RIWAYAT: DINDING/BANGUNAN --------------
         with subtab_riw_dinding:
@@ -614,17 +750,111 @@ with tab_riwayat:
                         key="dl_xlsx_cctv",
                     )
 
+        with subtab_riw_mcfa:
+            df_mcfa = df_all[df_all["Jenis Temuan"] == "MCFA"].copy()
+
+            if df_mcfa.empty:
+                st.info("Belum ada temuan trouble MCFA tersimpan.")
+            else:
+                jml_baru = int((df_mcfa["Status"] == "Baru").sum())
+                jml_proses = int((df_mcfa["Status"] == "Dalam Proses").sum())
+                jml_selesai = int((df_mcfa["Status"] == "Selesai").sum())
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Trouble MCFA", len(df_mcfa))
+                m2.metric("🆕 Baru", jml_baru)
+                m3.metric("🔧 Dalam Proses", jml_proses)
+                m4.metric("✅ Selesai", jml_selesai)
+
+                st.divider()
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    filter_tower_m = st.multiselect(
+                        "Filter Tower", sorted([t for t in df_mcfa["Tower"].unique() if t]), key="ft_mcfa"
+                    )
+                with col2:
+                    filter_status_m = st.multiselect("Filter Status", STATUS_OPTIONS, key="fs_mcfa")
+                with col3:
+                    cari_m = st.text_input("Cari (Zone/deskripsi)", key="cari_mcfa")
+
+                df_mcfa_filtered = df_mcfa.copy()
+                if filter_tower_m:
+                    df_mcfa_filtered = df_mcfa_filtered[df_mcfa_filtered["Tower"].isin(filter_tower_m)]
+                if filter_status_m:
+                    df_mcfa_filtered = df_mcfa_filtered[df_mcfa_filtered["Status"].isin(filter_status_m)]
+                if cari_m:
+                    df_mcfa_filtered = df_mcfa_filtered[
+                        df_mcfa_filtered["Temuan"].str.contains(cari_m, case=False, na=False)
+                    ]
+
+                st.subheader("🔄 Update Progres / Tandai Selesai")
+                kolom_terkunci = [c for c in COLUMNS if c not in ("Status", "Keterangan Progress", "PIC")]
+
+                edited_riwayat_m = st.data_editor(
+                    df_mcfa_filtered,
+                    column_config={
+                        "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
+                        "Keterangan Progress": st.column_config.SelectboxColumn(
+                            "Keterangan Progress", options=PROGRESS_OPTIONS
+                        ),
+                        "PIC": st.column_config.TextColumn("PIC", help="Nama teknisi penanggung jawab"),
+                        "ID": st.column_config.NumberColumn("ID", disabled=True),
+                    },
+                    disabled=kolom_terkunci,
+                    hide_index=True,
+                    use_container_width=True,
+                    key="editor_riwayat_mcfa",
+                )
+
+                if st.button("💾 Simpan Perubahan (MCFA)", type="primary", key="simpan_riwayat_mcfa"):
+                    jumlah_berubah = terapkan_perubahan_status(df_all, edited_riwayat_m)
+                    st.success(f"{jumlah_berubah} baris temuan MCFA berhasil diperbarui.")
+                    st.rerun()
+
+                st.caption(f"Menampilkan {len(df_mcfa_filtered)} dari {len(df_mcfa)} total trouble MCFA.")
+                st.caption(
+                    f"📁 File **{DATA_FILE_MCFA}** otomatis ter-update di server setiap ada "
+                    "simpan/perubahan — tombol di bawah cuma buat download salinannya ke komputer kamu."
+                )
+
+                col_dl1, col_dl2 = st.columns(2)
+                with col_dl1:
+                    st.download_button(
+                        "⬇️ Download CSV (MCFA)",
+                        data=df_mcfa.to_csv(index=False).encode("utf-8"),
+                        file_name="data_temuan_mcfa.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="dl_csv_mcfa",
+                    )
+                with col_dl2:
+                    st.download_button(
+                        "⬇️ Export ke Excel (MCFA)",
+                        data=export_ke_excel_bytes(df_mcfa),
+                        file_name="data_temuan_mcfa.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="dl_xlsx_mcfa",
+                    )
+
         st.divider()
         with st.expander("📄 Lihat Isi File CSV Mentah di Server"):
             pilihan_file = st.radio(
                 "Pilih file",
-                ["Gabungan (data_temuan.csv)", "Dinding saja (data_temuan_dinding.csv)", "CCTV saja (data_temuan_cctv.csv)"],
+                [
+                    "Gabungan (data_temuan.csv)",
+                    "Dinding saja (data_temuan_dinding.csv)",
+                    "CCTV saja (data_temuan_cctv.csv)",
+                    "MCFA saja (data_temuan_mcfa.csv)",
+                ],
                 horizontal=True,
             )
             path_terpilih = {
                 "Gabungan (data_temuan.csv)": DATA_FILE,
                 "Dinding saja (data_temuan_dinding.csv)": DATA_FILE_DINDING,
                 "CCTV saja (data_temuan_cctv.csv)": DATA_FILE_CCTV,
+                "MCFA saja (data_temuan_mcfa.csv)": DATA_FILE_MCFA,
             }[pilihan_file]
 
             st.caption(f"Isi apa adanya dari file **{os.path.abspath(path_terpilih)}**.")
