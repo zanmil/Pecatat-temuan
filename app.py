@@ -292,7 +292,7 @@ def parse_mcfa(teks: str) -> list[dict]:
     """
     records: list[dict] = []
     pola_item = re.compile(
-        r"^[*\-]\s*(?P<isi>.+?)\s*\(\s*(?P<hari>\d+)\s*hari\s*\)\s*$",
+        r"^[*\-]\s*(?P<isi>.+?)\s*\(\s*(?P<hari>\d+)\s*hari\s*\)[\s,.;]*$",
         re.IGNORECASE,
     )
 
